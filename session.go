@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
+	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/imroc/req"
 )
 
 type params req.Param
+type businessParams req.Param
 
 // Result request result.
 type Result struct {
@@ -21,6 +24,18 @@ type Result struct {
 	Sign    string
 }
 
+// BusinessResult request result.
+type BusinessResult struct {
+	Code    int
+	Data    map[string]interface{}
+	Message string
+	Sign    struct {
+		R string
+		S string
+	}
+	signVerified bool
+}
+
 type session struct {
 	client     client
 	nonceCount int
@@ -28,6 +43,10 @@ type session struct {
 
 func (session *session) get(path string) (*Result, error) {
 	return session.getWithParams(path, map[string]interface{}{})
+}
+
+func (session *session) businessGet(path string) (*BusinessResult, error) {
+	return session.businessGetWithParams(path, map[string]interface{}{})
 }
 
 func (session *session) getWithParams(path string, params params) (*Result, error) {
@@ -52,6 +71,34 @@ func (session *session) getWithParams(path string, params params) (*Result, erro
 	}
 
 	if err = result.error(session.client.getSecret()); err != nil {
+		return &result, err
+	}
+
+	return &result, err
+}
+
+func (session *session) businessGetWithParams(path string, params businessParams) (*BusinessResult, error) {
+	url := session.getURL(path)
+	err := session.businessPrepareParams(http.MethodGet, path, params)
+	if err != nil {
+		return nil, err
+	}
+
+	r, err := req.Get(url, session.commonHeaders(), req.Param(params))
+	if err != nil {
+		return nil, err
+	}
+	if r.Response().StatusCode != 200 {
+		return nil, fmt.Errorf("http error code:%d", r.Response().StatusCode)
+	}
+
+	var result BusinessResult
+	err = r.ToJSON(&result)
+	if err != nil {
+		return nil, fmt.Errorf("parse body to json failed: %v", err)
+	}
+
+	if err = result.error(session.client.getPubKey()); err != nil {
 		return &result, err
 	}
 
@@ -127,6 +174,34 @@ func (session *session) post(path string, params params) (*Result, error) {
 	}
 
 	if err = result.error(session.client.getSecret()); err != nil {
+		return nil, err
+	}
+
+	return &result, err
+}
+
+func (session *session) businessPost(path string, params businessParams) (*BusinessResult, error) {
+	url := session.getURL(path)
+	err := session.businessPrepareParams(http.MethodPost, path, params)
+	if err != nil {
+		return nil, err
+	}
+
+	r, err := req.Post(url, session.commonHeaders(), req.BodyJSON(&params))
+	if err != nil {
+		return nil, err
+	}
+	if r.Response().StatusCode != 200 {
+		return nil, fmt.Errorf("http error code:%d", r.Response().StatusCode)
+	}
+
+	var result BusinessResult
+	err = r.ToJSON(&result)
+	if err != nil {
+		return nil, fmt.Errorf("parse body to json failed: %v", err)
+	}
+
+	if err = result.error(session.client.getPubKey()); err != nil {
 		return nil, err
 	}
 
@@ -251,6 +326,34 @@ func (session *session) put(path string, params params) (*Result, error) {
 	return &result, err
 }
 
+func (session *session) businessPut(path string, params businessParams) (*BusinessResult, error) {
+	url := session.getURL(path)
+	err := session.businessPrepareParams(http.MethodPut, path, params)
+	if err != nil {
+		return nil, err
+	}
+
+	r, err := req.Put(url, session.commonHeaders(), req.BodyJSON(&params))
+	if err != nil {
+		return nil, err
+	}
+	if r.Response().StatusCode != 200 {
+		return nil, fmt.Errorf("http error code:%d", r.Response().StatusCode)
+	}
+
+	var result BusinessResult
+	err = r.ToJSON(&result)
+	if err != nil {
+		return nil, fmt.Errorf("parse body to json failed: %v", err)
+	}
+
+	if err = result.error(session.client.getPubKey()); err != nil {
+		return nil, err
+	}
+
+	return &result, err
+}
+
 func (session *session) delete(path string) (*Result, error) {
 	return session.deleteWithParams(path, map[string]interface{}{})
 }
@@ -294,6 +397,12 @@ func (session *session) prepareParams(params params) error {
 	return params.sign(session.client.getSecret())
 }
 
+func (session *session) businessPrepareParams(method, path string, params businessParams) error {
+	timestamp := time.Now().Unix()
+	params["timestamp"] = timestamp
+	return params.sign(method, path, session.client.getSecret())
+}
+
 func (session *session) commonHeaders() req.Header {
 	keyName := session.client.getKeyHeaderName()
 	return req.Header{
@@ -314,6 +423,62 @@ func (params *params) sign(secret string) error {
 	}
 	(*params)["sign"] = sign
 	return nil
+}
+
+func (params *businessParams) sign(method, path string, priKeyPemBase64 string) error {
+	msgStr := method + path
+	msgStr += buildMsg(*params, "", "")
+	sign, err := signECCDataStr(priKeyPemBase64, msgStr, "base64")
+	if err != nil {
+		return err
+	}
+	if method == http.MethodGet {
+		(*params)["sigR"] = sign.R
+		(*params)["sigS"] = sign.S
+	} else {
+		(*params)["sig"] = map[string]interface{}{
+			"r": sign.R,
+			"s": sign.S,
+		}
+	}
+	return nil
+}
+
+func (result *BusinessResult) error(pubKey string) error {
+	if !result.success() {
+		return errors.New(result.Message)
+	}
+
+	if len(pubKey) > 0 && !result.checkSign(pubKey) {
+		return errors.New("check sign failed")
+	}
+	return nil
+}
+
+func (result *BusinessResult) success() bool {
+	return result.Code == 0
+}
+
+func (result *BusinessResult) checkSign(pubKeyPemBase64 string) bool {
+	verified, err := verifyECCSign(pubKeyPemBase64, result.Data, &eccSig{
+		R: result.Sign.R,
+		S: result.Sign.S,
+	}, "base64")
+	if err != nil {
+		return false
+	}
+
+	result.signVerified = true
+	return verified
+}
+
+func (result *BusinessResult) ToResult() *Result {
+	return &Result{
+		Code:    result.Code,
+		Data:    result.Data,
+		Message: result.Message,
+		Sign:    strconv.FormatBool(result.signVerified),
+	}
 }
 
 func (result *Result) error(secret string) error {

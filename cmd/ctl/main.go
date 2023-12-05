@@ -17,6 +17,7 @@ func runCommand(arguments docopt.Opts) (*sdk.Result, error) {
 	action, _ := arguments.String("<action>")
 	params := arguments["<params>"].([]string)
 	addr, _ := arguments.String("--address")
+	pubKey, _ := arguments.String("--pubkey")
 
 	switch action {
 	case "CreateAddress":
@@ -364,6 +365,242 @@ func runCommand(arguments docopt.Opts) (*sdk.Result, error) {
 		}
 
 		return getKYC(addr, key, secret).ApplicationSubmit(params[0])
+	case "BusinessAssetsGet":
+		result, err := getBusiness(addr, key, secret, pubKey).AssetsGet()
+		if err != nil {
+			return nil, err
+		}
+		return result.ToResult(), nil
+	case "BusinessClientGet":
+		if len(params) != 1 {
+			return nil, errors.New("invalid params")
+		}
+
+		uid, err := strconv.ParseUint(params[0], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		result, err := getBusiness(addr, key, secret, pubKey).ClientGet(uint(uid))
+		if err != nil {
+			return nil, err
+		}
+		return result.ToResult(), nil
+	case "BusinessClientsGet":
+		if len(params) != 2 {
+			return nil, errors.New("invalid params")
+		}
+
+		page, err := strconv.ParseUint(params[0], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		amount, err := strconv.ParseUint(params[1], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		result, err := getBusiness(addr, key, secret, pubKey).ClientsGet(uint(page), uint(amount))
+		if err != nil {
+			return nil, err
+		}
+		return result.ToResult(), nil
+	case "BusinessClientCardsGet":
+		if len(params) != 1 {
+			return nil, errors.New("invalid params")
+		}
+
+		uid, err := strconv.ParseUint(params[0], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		result, err := getBusiness(addr, key, secret, pubKey).ClientCardsGet(uint(uid))
+		if err != nil {
+			return nil, err
+		}
+		return result.ToResult(), nil
+	case "BusinessWalletBalancesGet":
+		if len(params) != 2 {
+			return nil, errors.New("invalid params")
+		}
+
+		uid, err := strconv.ParseUint(params[0], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		aid, err := strconv.ParseUint(params[1], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		result, err := getBusiness(addr, key, secret, pubKey).WalletBalancesGet(uint(uid), uint(aid))
+		if err != nil {
+			return nil, err
+		}
+		return result.ToResult(), nil
+	case "BusinessBalanceSettle":
+		if len(params) != 5 {
+			return nil, errors.New("invalid params")
+		}
+
+		uid, err := strconv.ParseUint(params[1], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		aid, err := strconv.ParseUint(params[2], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		result, err := getBusiness(addr, key, secret, pubKey).BalanceSettle(uint(uid), uint(aid), params[0], params[3], params[4])
+		if err != nil {
+			return nil, err
+		}
+		return result.ToResult(), nil
+	case "BusinessBalanceLock":
+		if len(params) != 4 {
+			return nil, errors.New("invalid params")
+		}
+
+		uid, err := strconv.ParseUint(params[1], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		aid, err := strconv.ParseUint(params[2], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		result, err := getBusiness(addr, key, secret, pubKey).BalanceLock(uint(uid), uint(aid), params[0], params[3])
+		if err != nil {
+			return nil, err
+		}
+		return result.ToResult(), nil
+	case "BusinessBalanceUnlock":
+		if len(params) != 4 {
+			return nil, errors.New("invalid params")
+		}
+
+		uid, err := strconv.ParseUint(params[1], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		aid, err := strconv.ParseUint(params[2], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		result, err := getBusiness(addr, key, secret, pubKey).BalanceUnlock(uint(uid), uint(aid), params[0], params[3])
+		if err != nil {
+			return nil, err
+		}
+		return result.ToResult(), nil
+	case "BusinessTransfer":
+		if len(params) != 5 {
+			return nil, errors.New("invalid params")
+		}
+
+		aid, err := strconv.ParseUint(params[1], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		fid, err := strconv.ParseUint(params[3], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		tid, err := strconv.ParseUint(params[4], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		result, err := getBusiness(addr, key, secret, pubKey).Transfer(uint(fid), uint(tid), uint(aid), params[0], params[2], "")
+		if err != nil {
+			return nil, err
+		}
+		return result.ToResult(), nil
+	case "BusinessSwap":
+		if len(params) != 6 {
+			return nil, errors.New("invalid params")
+		}
+
+		uid, err := strconv.ParseUint(params[1], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		aid, err := strconv.ParseUint(params[2], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		oaid, err := strconv.ParseUint(params[4], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		result, err := getBusiness(addr, key, secret, pubKey).Swap(uint(uid), uint(aid), uint(oaid), params[0], params[3], params[5], "")
+		if err != nil {
+			return nil, err
+		}
+		return result.ToResult(), nil
+	case "BusinessBatch":
+		if len(params) != 1 {
+			return nil, errors.New("invalid params")
+		}
+
+		cmd := []*sdk.BatchCommand{}
+		err := json.NewDecoder(strings.NewReader(params[0])).Decode(&cmd)
+		if err != nil {
+			return nil, err
+		}
+		result, err := getBusiness(addr, key, secret, pubKey).Batch(cmd)
+		if err != nil {
+			return nil, err
+		}
+		return result.ToResult(), nil
+	case "BusinessOrderGet":
+		if len(params) != 1 {
+			return nil, errors.New("invalid params")
+		}
+
+		result, err := getBusiness(addr, key, secret, pubKey).OrderGetBySequence(params[0])
+		if err != nil {
+			return nil, err
+		}
+		return result.ToResult(), nil
+	case "BusinessTransactionsGet":
+		if len(params) != 5 {
+			return nil, errors.New("invalid params")
+		}
+
+		uid, err := strconv.ParseUint(params[0], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		page, err := strconv.ParseUint(params[3], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		amount, err := strconv.ParseUint(params[4], 10, 64)
+		if err != nil {
+			return nil, errors.New("invalid params")
+		}
+
+		result, err := getBusiness(addr, key, secret, pubKey).TransactionsGet(uint(uid), params[1], params[2], uint(page), uint(amount))
+		if err != nil {
+			return nil, err
+		}
+		return result.ToResult(), nil
 	default:
 		return nil, errors.New("unknown action: " + action)
 	}
@@ -387,16 +624,22 @@ func getKYC(addr, key, secret string) *sdk.KYC {
 	return sdk.NewKYCWithAddr(addr, key, secret)
 }
 
+func getBusiness(addr, key, secret, pubKey string) *sdk.Business {
+	b, _ := sdk.NewBusinessWithAddr(addr, key, secret, pubKey)
+	return b
+}
+
 func main() {
 	usage := `JadePool SAAS control tool.
 
 Usage:
-  ctl <key> <secret> <action> [<params>...] [-a <host>]
+  ctl <key> <secret> <action> [<params>...] [-a <host>] [-p <key>]
   ctl -h | --help
 
 Options:
   -h --help                   Show this screen.
-  -a <host>, --address <host> Use custom SAAS server, e.g., http://127.0.0.1:8092`
+  -a <host>, --address <host> Use custom SAAS server, e.g., http://127.0.0.1:8092
+  -p <key>, --pubkey <key> Use the public key pem file for verifying response`
 
 	arguments, _ := docopt.ParseDoc(usage)
 
@@ -408,6 +651,7 @@ Options:
 
 	fmt.Println("code:", result.Code)
 	fmt.Println("message:", result.Message)
+	fmt.Println("sign:", result.Sign)
 	fmt.Println("data:")
 	printMap(result.Data)
 }

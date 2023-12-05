@@ -8,5 +8,6 @@ type client interface {
 	getKey() string
 	getKeyHeaderName() string
 	getSecret() string
+	getPubKey() string
 	getAddr() string
 }

@@ -120,7 +120,7 @@ func (a *App) GetOrder(id string) (*Result, error) {
 
 // UpdateOrder update order's note.
 func (a *App) UpdateOrder(id string, note string) (*Result, error) {
-	return a.session.put("/api/v1/app/order/" + id, map[string]interface{}{
+	return a.session.put("/api/v1/app/order/"+id, map[string]interface{}{
 		"note": note,
 	})
 }
@@ -151,8 +151,8 @@ func (a *App) Transfer(to, coinType, value string) (*Result, error) {
 	}
 
 	return a.session.post("/api/v1/app/"+coinType+"/transfer", map[string]interface{}{
-		"to":    to,
-		"value": value,
+		"to":      to,
+		"value":   value,
 		"note":    "",
 		"message": "",
 	})
@@ -342,6 +342,10 @@ func (a *App) getKeyHeaderName() string {
 
 func (a *App) getSecret() string {
 	return a.Secret
+}
+
+func (a *App) getPubKey() string {
+	return ""
 }
 
 func (a *App) getAddr() string {

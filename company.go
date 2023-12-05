@@ -208,6 +208,10 @@ func (c *Company) getSecret() string {
 	return c.Secret
 }
 
+func (c *Company) getPubKey() string {
+	return ""
+}
+
 func (c *Company) getAddr() string {
 	return c.Addr
 }
