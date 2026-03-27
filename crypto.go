@@ -6,10 +6,17 @@ import (
 	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
+	"errors"
 	"fmt"
+	"github.com/btcsuite/btcd/btcec"
+	"golang.org/x/crypto/sha3"
+	"math/big"
 	"reflect"
 	"sort"
 	"strconv"
@@ -157,8 +164,158 @@ func aesDecrypt(src []byte, key []byte, iv []byte) ([]byte, error) {
 	return src, nil
 }
 
+func parseEcdsaPrivateKeyFromPem(pemContent []byte) (*btcec.PrivateKey, error) {
+	block, _ := pem.Decode(pemContent)
+	if block == nil {
+		return nil, errors.New("invalid pem")
+	}
+
+	var ecp ecPrivateKey
+	_, err := asn1.Unmarshal(block.Bytes, &ecp)
+	if err != nil {
+		return nil, err
+	}
+
+	priKey, _ := btcec.PrivKeyFromBytes(btcec.S256(), ecp.PrivateKey)
+	return priKey, nil
+}
+
+func signECCDataStr(priKeyPemBase64 string, msgStr string, sigEncode string) (*eccSig, error) {
+	priKeyPem, err := base64.StdEncoding.DecodeString(priKeyPemBase64)
+	if err != nil {
+		return nil, err
+	}
+	priKey, err := parseEcdsaPrivateKeyFromPem(priKeyPem)
+	if err != nil {
+		return nil, err
+	}
+
+	sha3Hash := sha3.NewLegacyKeccak256()
+	_, err = sha3Hash.Write([]byte(msgStr))
+	if err != nil {
+		return nil, err
+	}
+	msgBuf := sha3Hash.Sum(nil)
+	sig, err := priKey.Sign(msgBuf)
+	if err != nil {
+		return nil, err
+	}
+
+	r := sig.R.Bytes()
+	s := sig.S.Bytes()
+	if len(r) < 32 {
+		preArr := []byte{}
+		for i := len(r) + 1; i <= 32; i++ {
+			preArr = append(preArr, 0)
+		}
+		r = append(preArr, r...)
+	}
+	if len(s) < 32 {
+		preArr := []byte{}
+		for i := len(s) + 1; i <= 32; i++ {
+			preArr = append(preArr, 0)
+		}
+		s = append(preArr, s...)
+	}
+	_sig := &eccSig{}
+	if sigEncode == "hex" {
+		_sig.R = hex.EncodeToString(r)
+		_sig.S = hex.EncodeToString(s)
+	} else if sigEncode == "base64" {
+		_sig.R = base64.StdEncoding.EncodeToString(r)
+		_sig.S = base64.StdEncoding.EncodeToString(s)
+	}
+	return _sig, nil
+}
+
+func parseEcdsaPubKeyFromPem(pemContent []byte) (*btcec.PublicKey, error) {
+	block, _ := pem.Decode(pemContent)
+	if block == nil {
+		return nil, errors.New("invalid pem")
+	}
+
+	var ecp ecPublicKey
+	_, err := asn1.Unmarshal(block.Bytes, &ecp)
+	if err != nil {
+		return nil, err
+	}
+
+	return btcec.ParsePubKey(ecp.PublicKey.RightAlign(), btcec.S256())
+}
+
+func verifyECCSign(pubKeyPemBase64 string, obj map[string]interface{}, sign *eccSig, sigEncode string) (bool, error) {
+	pubKeyPem, err := base64.StdEncoding.DecodeString(pubKeyPemBase64)
+	if err != nil {
+		return false, err
+	}
+
+	pubKey, err := parseEcdsaPubKeyFromPem(pubKeyPem)
+	if err != nil {
+		return false, err
+	}
+
+	msgStr := buildMsg(obj, "", "")
+	return verifyECCSignStr(msgStr, sign, pubKey, sigEncode)
+}
+
+func verifyECCSignStr(msgStr string, sign *eccSig, pubKey *btcec.PublicKey, sigEncode string) (bool, error) {
+	sha3Hash := sha3.NewLegacyKeccak256()
+	_, err := sha3Hash.Write([]byte(msgStr))
+	if err != nil {
+		return false, err
+	}
+	msgBuf := sha3Hash.Sum(nil)
+
+	var decodedR, decodedS []byte
+	if sigEncode == "hex" {
+		decodedR, err = hex.DecodeString(sign.R)
+		if err != nil {
+			return false, err
+		}
+		decodedS, err = hex.DecodeString(sign.S)
+		if err != nil {
+			return false, err
+		}
+	} else if sigEncode == "base64" {
+		decodedR, err = base64.StdEncoding.DecodeString(sign.R)
+		if err != nil {
+			return false, err
+		}
+		decodedS, err = base64.StdEncoding.DecodeString(sign.S)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	signature := btcec.Signature{
+		R: new(big.Int).SetBytes(decodedR),
+		S: new(big.Int).SetBytes(decodedS),
+	}
+	return signature.Verify(msgBuf, pubKey), nil
+}
+
 func unpadding(src []byte) []byte {
 	n := len(src)
 	unPadNum := int(src[n-1])
 	return src[:n-unPadNum]
+}
+
+//This type provides compatibility with the btcec package
+type ecPrivateKey struct {
+	Version       int
+	PrivateKey    []byte
+	NamedCurveOID asn1.ObjectIdentifier `asn1:"optional,explicit,tag:0"`
+	PublicKey     asn1.BitString        `asn1:"optional,explicit,tag:1"`
+}
+
+//This type provides compatibility with the btcec package
+type ecPublicKey struct {
+	Raw       asn1.RawContent
+	Algorithm pkix.AlgorithmIdentifier
+	PublicKey asn1.BitString
+}
+
+type eccSig struct {
+	R string `json:"r"`
+	S string `json:"s"`
 }

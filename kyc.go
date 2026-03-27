@@ -150,6 +150,10 @@ func (k *KYC) getSecret() string {
 	return k.Secret
 }
 
+func (k *KYC) getPubKey() string {
+	return ""
+}
+
 func (k *KYC) getAddr() string {
 	return k.Addr
 }
